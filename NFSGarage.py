@@ -4,12 +4,18 @@ import ctypes
 import shutil
 import random
 import rarfile
+import zipfile
+try:
+    import py7zr
+    HAS_7Z = True
+except ImportError:
+    HAS_7Z = False
 import subprocess
 import json
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QPushButton, QFileDialog,
     QLabel, QVBoxLayout, QHBoxLayout, QMessageBox,
-    QFrame, QListWidget, QAbstractItemView, QListWidgetItem
+    QFrame, QListWidget, QAbstractItemView, QListWidgetItem, QDialog
 )
 from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QPoint, QTimer, QPointF
 from PyQt6.QtGui import QPainter, QColor, QLinearGradient, QBrush, QIcon, QFont
@@ -35,17 +41,111 @@ def user_data_path(filename):
 
 
 class Star:
-    def __init__(self, width, height):
+    def __init__(self, width, height, layer=None):
         self.x = random.uniform(0, width)
         self.y = random.uniform(0, height)
-        self.size = random.uniform(0.5, 1.5)
-        self.speed = random.uniform(0.02, 0.08)
+        # 3 capas: lejanas (pequeñas/lentas), medias, cercanas (grandes/rápidas)
+        if layer is None:
+            layer = random.choices([0, 1, 2], weights=[50, 35, 15])[0]
+        self.layer = layer
+        if layer == 0:   # lejanas
+            self.size  = random.uniform(0.3, 0.8)
+            self.speed = random.uniform(0.04, 0.10)
+            self.alpha = random.randint(50, 120)
+        elif layer == 1: # medias
+            self.size  = random.uniform(0.8, 1.4)
+            self.speed = random.uniform(0.10, 0.22)
+            self.alpha = random.randint(120, 180)
+        else:            # cercanas
+            self.size  = random.uniform(1.4, 2.2)
+            self.speed = random.uniform(0.22, 0.45)
+            self.alpha = random.randint(180, 255)
 
     def move(self, width, height):
         self.y += self.speed
         if self.y > height:
             self.y = 0
             self.x = random.uniform(0, width)
+
+
+class ModPreviewDialog(QDialog):
+    """Ventana de vista previa antes de instalar el mod."""
+    def __init__(self, parent, car_name, bin_labels, lang):
+        super().__init__(parent)
+        self.setWindowTitle("MOD PREVIEW" if lang == "EN" else "VISTA PREVIA")
+        self.setFixedSize(460, 300)
+        self.setStyleSheet("QWidget { background-color: #050A14; }")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(35, 30, 35, 30)
+        layout.setSpacing(16)
+
+        # Título
+        title = QLabel("MOD PREVIEW" if lang == "EN" else "VISTA PREVIA DEL MOD")
+        title.setStyleSheet("color: #4A90E2; font-size: 13px; font-weight: bold; letter-spacing: 2px;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        # Separador
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("background: rgba(74,144,226,0.3); border: none;")
+        sep.setFixedHeight(1)
+        layout.addWidget(sep)
+
+        # Carpeta del auto
+        lbl_car_title = QLabel("FOLDER TO INSTALL:" if lang == "EN" else "CARPETA A INSTALAR:")
+        lbl_car_title.setStyleSheet("color: rgba(74,144,226,0.5); font-size: 9px; font-weight: bold; letter-spacing: 1px;")
+        layout.addWidget(lbl_car_title)
+
+        lbl_car = QLabel(car_name.upper() if car_name != "Not detected" else "— NOT DETECTED —")
+        car_color = "#FFFFFF" if car_name != "Not detected" else "rgba(255,255,255,0.3)"
+        lbl_car.setStyleSheet(f"color: {car_color}; font-size: 14px; font-weight: bold;")
+        layout.addWidget(lbl_car)
+
+        # BINs
+        lbl_bin_title = QLabel("MANUFACTURER BIN:" if lang == "EN" else "BIN DE FABRICANTE:")
+        lbl_bin_title.setStyleSheet("color: rgba(74,144,226,0.5); font-size: 9px; font-weight: bold; letter-spacing: 1px;")
+        layout.addWidget(lbl_bin_title)
+
+        lbl_bin = QLabel(bin_labels if bin_labels != "None" else "— NONE —")
+        bin_color = "#FFFFFF" if bin_labels != "None" else "rgba(255,255,255,0.3)"
+        lbl_bin.setStyleSheet(f"color: {bin_color}; font-size: 11px;")
+        lbl_bin.setWordWrap(True)
+        layout.addWidget(lbl_bin)
+
+        layout.addStretch()
+
+        # Botones
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(12)
+
+        btn_cancel = QPushButton("CANCEL" if lang == "EN" else "CANCELAR")
+        btn_cancel.setFixedHeight(40)
+        btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_cancel.setStyleSheet("""
+            QPushButton { background: transparent; color: rgba(255,255,255,0.4);
+                border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; font-weight: bold; font-size: 11px; }
+            QPushButton:hover { color: white; border-color: rgba(255,255,255,0.4); }
+        """)
+        btn_cancel.clicked.connect(self.reject)
+
+        btn_install = QPushButton("INSTALL" if lang == "EN" else "INSTALAR")
+        btn_install.setFixedHeight(40)
+        btn_install.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_install.setStyleSheet("""
+            QPushButton { background: rgba(74,144,226,0.1); color: #4A90E2;
+                border: 1px solid rgba(74,144,226,0.4); border-radius: 4px; font-weight: bold; font-size: 11px; }
+            QPushButton:hover { background: #4A90E2; color: white; border-color: #4A90E2; }
+        """)
+        btn_install.clicked.connect(self._confirm)
+
+        btn_layout.addWidget(btn_cancel)
+        btn_layout.addWidget(btn_install)
+        layout.addLayout(btn_layout)
+
+    def _confirm(self):
+        self.accept()
 
 
 class ModLoaderGUI(QWidget):
@@ -67,7 +167,8 @@ class ModLoaderGUI(QWidget):
                 "title": "NFS Garage",
                 "install_ml": "INSTALL MODLOADER",
                 "active_ml": "MODLOADER ACTIVE",
-                "import": "IMPORT",
+                "import": "IMPORT FROM FOLDER",
+                "import_rar": "IMPORT FROM RAR",
                 "library": "LIBRARY",
                 "mods_folder": "MODS FOLDER",
                 "launch": "LAUNCH GAME",
@@ -86,7 +187,8 @@ class ModLoaderGUI(QWidget):
                 "title": "NFS Garage",
                 "install_ml": "INSTALAR MODMANAGER",
                 "active_ml": "MODMANAGER ACTIVO",
-                "import": "IMPORTAR",
+                "import": "IMPORTAR CARPETA",
+                "import_rar": "IMPORTAR RAR",
                 "library": "BIBLIOTECA",
                 "mods_folder": "CARPETA DE MODS",
                 "launch": "INICIAR JUEGO",
@@ -105,13 +207,19 @@ class ModLoaderGUI(QWidget):
 
         self.setWindowTitle("NFS Garage")
         self.setFixedSize(700, 800)
+        self.setWindowFlags(
+            Qt.WindowType.Window |
+            Qt.WindowType.WindowCloseButtonHint |
+            Qt.WindowType.WindowMinimizeButtonHint |
+            Qt.WindowType.MSWindowsFixedSizeDialogHint
+        )
 
         # ── Rutas de datos del usuario (portables) ─────────────────────
         self.config_file  = user_data_path("config.txt")
         self.history_file = user_data_path("history.json")
 
         self.game_path = ""
-        self.stars = [Star(700, 800) for _ in range(80)]
+        self.stars = [Star(700, 800) for _ in range(200)]
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_background)
         self.timer.start(30)
@@ -178,8 +286,8 @@ class ModLoaderGUI(QWidget):
         gradient.setColorAt(1, QColor(2, 4, 8))
         painter.fillRect(self.rect(), QBrush(gradient))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(255, 255, 255, 100))
         for star in self.stars:
+            painter.setBrush(QColor(255, 255, 255, star.alpha))
             painter.drawEllipse(QPointF(star.x, star.y), star.size, star.size)
 
     # ── UI ───────────────────────────────────────────────────────────────
@@ -238,17 +346,19 @@ class ModLoaderGUI(QWidget):
 
         self.btn_install_base = QPushButton()
         self.btn_import       = QPushButton()
+        self.btn_import_rar   = QPushButton()
         self.btn_library      = QPushButton()
         self.btn_mods_folder  = QPushButton()
         self.btn_launch       = QPushButton()
 
-        for btn in [self.btn_install_base, self.btn_import,
+        for btn in [self.btn_install_base, self.btn_import, self.btn_import_rar,
                     self.btn_library, self.btn_mods_folder, self.btn_launch]:
             btn.setStyleSheet(estilo_btn)
             contenedor_botones.addWidget(btn)
 
         self.btn_install_base.clicked.connect(self.install_modloader_surgical)
         self.btn_import.clicked.connect(self.select_file)
+        self.btn_import_rar.clicked.connect(self.select_rar)
         self.btn_library.clicked.connect(self.open_library)
         self.btn_mods_folder.clicked.connect(self.open_mods_folder)
         self.btn_launch.clicked.connect(self.launch_game)
@@ -327,6 +437,7 @@ class ModLoaderGUI(QWidget):
         t = self.texts[self.lang]
         self.btn_install_base.setText(t["install_ml"] if self.btn_install_base.isEnabled() else t["active_ml"])
         self.btn_import.setText(t["import"])
+        self.btn_import_rar.setText(t["import_rar"])
         self.btn_library.setText(t["library"])
         self.btn_mods_folder.setText(t["mods_folder"])
         self.btn_launch.setText(t["launch"])
@@ -376,12 +487,50 @@ class ModLoaderGUI(QWidget):
 
     # ── Importar mods ────────────────────────────────────────────────────
 
+    def select_rar(self):
+        """Selecciona un archivo comprimido y lo instala automáticamente."""
+        title = "Select MOD Archive" if self.lang == "EN" else "Seleccione el archivo del MOD"
+        path, _ = QFileDialog.getOpenFileName(
+            self, title, "",
+            "Compressed files (*.rar *.zip *.7z)"
+        )
+        if path:
+            temp_dir = os.path.join(os.environ["TEMP"], "nfs_work_dir")
+            try:
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)
+                os.makedirs(temp_dir)
+                self.extract_archive(path, temp_dir)
+                self.import_logic(temp_dir, "folder")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e))
+            finally:
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)
+
     def select_file(self):
-        # Abre explorador nativo de Windows — seleccione la carpeta raíz del mod
         title = "Select MOD Folder" if self.lang == "EN" else "Seleccione la carpeta del MOD"
         path = QFileDialog.getExistingDirectory(self, title)
         if path:
             self.import_logic(path, "folder")
+
+    def extract_archive(self, archive_path, dest_dir):
+        """Extrae cualquier formato soportado al directorio destino."""
+        ext = os.path.splitext(archive_path)[1].lower()
+        if ext == ".rar":
+            with rarfile.RarFile(archive_path) as rf:
+                rf.extractall(dest_dir)
+        elif ext == ".zip":
+            with zipfile.ZipFile(archive_path, 'r') as zf:
+                zf.extractall(dest_dir)
+        elif ext == ".7z":
+            if HAS_7Z:
+                with py7zr.SevenZipFile(archive_path, mode='r') as zf:
+                    zf.extractall(dest_dir)
+            else:
+                raise Exception("7z support requires py7zr: pip install py7zr")
+        else:
+            raise Exception(f"Unsupported format: {ext}")
 
     def import_logic(self, source_path, import_type):
         temp_dir = os.path.join(os.environ["TEMP"], "nfs_work_dir")
@@ -390,47 +539,64 @@ class ModLoaderGUI(QWidget):
                 if os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir)
                 os.makedirs(temp_dir)
-                with rarfile.RarFile(source_path) as rf:
-                    rf.extractall(temp_dir)
+                self.extract_archive(source_path, temp_dir)
                 work_path = temp_dir
             else:
                 work_path = source_path
 
             car_folder_src, car_name, bins_to_move = None, "Not detected", []
 
-            # Señales de carpeta de auto
-            CAR_SIGNALS = {"geometry.bin", "car.ini", "colors.bin", "damage.bin"}
+            # ── Señales de carpeta de auto ───────────────────────────────
+            # Busca por nombre base SIN extensión (insensible a mayúsculas)
+            # Cubre: GEOMETRY.BIN, geometry.bin, GEOMETRY, Geometry, etc.
+            CAR_SIGNALS_BASE = {"geometry", "car", "fe", "attributes", "vinyls",
+                                "colors", "damage", "textures", "secondarylogo"}
+
+            # BINs de marcas: nombre empieza con número (ej: 101-NISSAN, 27-FORD_HD)
+            def is_manufacturer_bin(filename):
+                base = os.path.splitext(filename)[0]
+                return base[0].isdigit() if base else False
+
+            def get_car_signals(files):
+                """Retorna cuántas señales de auto hay en la lista de archivos."""
+                bases = {os.path.splitext(f)[0].lower() for f in files}
+                return len(CAR_SIGNALS_BASE & bases)
 
             for root, dirs, files in os.walk(work_path):
-                files_lower = [f.lower() for f in files]
+                in_frontend = any(p in root.upper() for p in ["FRONTEND", "MANUFACTURERS"])
 
-                # Detectar carpeta de auto: geometry.bin O al menos 2 señales conocidas
-                is_car_folder = (
-                    "geometry.bin" in files_lower or
-                    len(CAR_SIGNALS & set(files_lower)) >= 2
-                )
-                if is_car_folder and "FRONTEND" not in root:
+                # Detectar carpeta de auto: tiene GEOMETRY o al menos 2 señales
+                bases = {os.path.splitext(f)[0].lower() for f in files}
+                has_geometry = "geometry" in bases
+                signal_count = len(CAR_SIGNALS_BASE & bases)
+
+                if (has_geometry or signal_count >= 2) and not in_frontend:
                     car_folder_src = root
                     car_name = os.path.basename(root)
 
-                # Detectar BINs: empieza con número O está dentro de carpeta MANUFACTURERS/FRONTEND
+                # Detectar BINs de marcas: nombre empieza con número
                 for f in files:
-                    fl = f.lower()
-                    if fl.endswith(".bin"):
-                        in_frontend = "FRONTEND" in root or "MANUFACTURERS" in root
-                        starts_digit = f[0].isdigit()
-                        if starts_digit or in_frontend:
-                            bins_to_move.append(os.path.join(root, f))
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext == ".bin" and is_manufacturer_bin(f):
+                        bins_to_move.append(os.path.join(root, f))
 
-            # Si la carpeta seleccionada ES directamente la carpeta del auto
+            # Si seleccionó directamente la carpeta raíz del auto
             if car_folder_src is None and not bins_to_move:
-                files_lower = [f.lower() for f in os.listdir(work_path)
-                               if os.path.isfile(os.path.join(work_path, f))]
-                if "geometry.bin" in files_lower or len(CAR_SIGNALS & set(files_lower)) >= 2:
+                files = [f for f in os.listdir(work_path)
+                         if os.path.isfile(os.path.join(work_path, f))]
+                bases = {os.path.splitext(f)[0].lower() for f in files}
+                if "geometry" in bases or len(CAR_SIGNALS_BASE & bases) >= 2:
                     car_folder_src = work_path
                     car_name = os.path.basename(work_path)
 
             if car_folder_src or bins_to_move:
+                bin_labels = ", ".join(os.path.basename(x) for x in bins_to_move) if bins_to_move else "None"
+
+                # ── Vista previa antes de instalar ───────────────────────
+                preview = ModPreviewDialog(self, car_name, bin_labels, self.lang)
+                if not preview.exec():
+                    return  # Usuario canceló
+
                 if car_folder_src:
                     dest_car = os.path.join(self.addons_path, "CARS_REPLACE", car_name)
                     if os.path.exists(dest_car):
@@ -443,7 +609,6 @@ class ModLoaderGUI(QWidget):
                     for b in bins_to_move:
                         shutil.copy2(b, os.path.join(dest_man, os.path.basename(b)))
 
-                bin_labels = ", ".join(os.path.basename(x) for x in bins_to_move) if bins_to_move else "None"
                 self.add_to_history(car_name, bin_labels)
                 self.save_history_to_disk(car_name, bin_labels)
                 QMessageBox.information(self, "Done", f"{self.texts[self.lang]['mod_installed']} {car_name}.\nBINs: {bin_labels}")
@@ -518,9 +683,14 @@ class ModLoaderGUI(QWidget):
 
     def open_library(self):
         if not hasattr(self, "ventana_bib") or self.ventana_bib is None:
-            self.ventana_bib = QWidget(self, Qt.WindowType.Window)
+            self.ventana_bib = QWidget(self)
             self.ventana_bib.setWindowTitle("Library")
             self.ventana_bib.setFixedSize(500, 650)
+            self.ventana_bib.setWindowFlags(
+                Qt.WindowType.Window |
+                Qt.WindowType.WindowCloseButtonHint |
+                Qt.WindowType.MSWindowsFixedSizeDialogHint
+            )
             self.ventana_bib.setStyleSheet("QWidget { background-color: #050A14; }")
             layout_bib = QVBoxLayout(self.ventana_bib)
             layout_bib.setContentsMargins(30, 30, 30, 30)
@@ -700,3 +870,4 @@ if __name__ == "__main__":
         sys.exit(app.exec())
     except Exception as e:
         ctypes.windll.user32.MessageBoxW(0, f"Error Crítico: {str(e)}", "NFS Garage Crash", 0x10)
+
