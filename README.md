@@ -1,4 +1,5 @@
-Disclaimer: ModLoader is not my property; This project uses ModLoader v1.3 by Adhitya BI, modified and integrated into NFS Garage with a new folder structure and improved workflow by me.
+ Disclaimer: ModLoader is not my property; This project uses ModLoader modified and integrated into NFS Garage with a new folder structure and improved workflow by me.
+Credits: To the original creator of the ModLoader and all contributors, as applicable.
 
 NFS Garage is a lightweight mod manager for Need for Speed Most Wanted using **ModLoader**.  
 It lets you import mods, manage them, and launch the game easily from one simple interface.
