@@ -15,7 +15,7 @@ import json
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QPushButton, QFileDialog,
     QLabel, QVBoxLayout, QHBoxLayout, QMessageBox,
-    QFrame, QListWidget, QAbstractItemView, QListWidgetItem, QDialog
+    QFrame, QListWidget, QAbstractItemView, QListWidgetItem, QDialog, QLineEdit
 )
 from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QPoint, QTimer, QPointF
 from PyQt6.QtGui import QPainter, QColor, QLinearGradient, QBrush, QIcon, QFont
@@ -39,6 +39,34 @@ def user_data_path(filename):
     os.makedirs(folder, exist_ok=True)
     return os.path.join(folder, filename)
 
+
+# ── Temas de color ──────────────────────────────────────────────────────────
+THEMES = {
+    "blue": {
+        "accent":       "#4A90E2",
+        "accent_rgba":  "74,144,226",
+        "bg_top":       "5, 10, 20",
+        "bg_bot":       "2, 4, 8",
+        "panel_bg":     "#050A14",
+        "star_color":   "255,255,255",
+    },
+    "purple": {
+        "accent":       "#9B59B6",
+        "accent_rgba":  "155,89,182",
+        "bg_top":       "8, 3, 18",
+        "bg_bot":       "3, 1, 8",
+        "panel_bg":     "#080312",
+        "star_color":   "200,170,255",
+    },
+    "black": {
+        "accent":       "#C0C0C0",
+        "accent_rgba":  "192,192,192",
+        "bg_top":       "3, 3, 3",
+        "bg_bot":       "0, 0, 0",
+        "panel_bg":     "#080808",
+        "star_color":   "255,255,255",
+    },
+}
 
 class Star:
     def __init__(self, width, height, layer=None):
@@ -76,14 +104,14 @@ class LanguageSelectDialog(QDialog):
         self.setWindowTitle("NFS Garage")
         self.setFixedSize(400, 260)
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.MSWindowsFixedSizeDialogHint)
-        self.setStyleSheet("QWidget { background-color: #050A14; }")
+        self.setStyleSheet("QWidget { background-color: #080808; }")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(50, 40, 50, 40)
         layout.setSpacing(20)
 
         title = QLabel("NFS GARAGE")
-        title.setStyleSheet("color: #4A90E2; font-size: 22px; font-weight: bold; letter-spacing: 4px;")
+        title.setStyleSheet("color: white; font-size: 22px; font-weight: bold; letter-spacing: 4px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
@@ -96,11 +124,11 @@ class LanguageSelectDialog(QDialog):
 
         btn_style = """
             QPushButton {
-                background: rgba(74,144,226,0.05); color: #4A90E2;
-                border: 1px solid rgba(74,144,226,0.3); border-radius: 4px;
+                background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.7);
+                border: 1px solid rgba(255,255,255,0.15); border-radius: 4px;
                 font-size: 13px; font-weight: bold; min-height: 42px;
             }
-            QPushButton:hover { background: #4A90E2; color: white; border-color: #4A90E2; }
+            QPushButton:hover { background: rgba(255,255,255,0.1); color: white; border-color: rgba(255,255,255,0.4); }
         """
         btn_en = QPushButton("English")
         btn_en.setStyleSheet(btn_style)
@@ -120,13 +148,106 @@ class LanguageSelectDialog(QDialog):
         self.accept()
 
 
+class FolderHintDialog(QDialog):
+    """Mensaje estético cuando IMPORT FROM FOLDER no detecta contenido válido."""
+    def __init__(self, parent, lang, theme="blue"):
+        super().__init__(parent)
+        t = THEMES[theme]; a = t["accent"]; ar = t["accent_rgba"]; pb = t["panel_bg"]
+        self.setWindowTitle("NFS Garage")
+        self.setFixedSize(420, 210)
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint | Qt.WindowType.MSWindowsFixedSizeDialogHint)
+        self.setStyleSheet(f"QDialog {{ background-color: {pb}; }}")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(35, 30, 35, 30)
+        layout.setSpacing(14)
+
+        icon_lbl = QLabel("⚠")
+        icon_lbl.setStyleSheet("color: #E67E22; font-size: 28px; background: transparent;")
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(icon_lbl)
+
+        if lang == "EN":
+            msg = "No valid content detected.<br><br>Make sure the selected folder contains a <b>ModLoader-compatible mod</b>.<br>It should include files like CARS_REPLACE or similar."
+        else:
+            msg = "No se detectó contenido válido.<br><br>Asegúrese de que la carpeta seleccionada contenga un <b>mod compatible con ModLoader</b>.<br>Debe incluir archivos como CARS_REPLACE o similares."
+
+        lbl = QLabel(msg)
+        lbl.setTextFormat(Qt.TextFormat.RichText)
+        lbl.setStyleSheet("color: rgba(255,255,255,0.85); font-size: 11px; background: transparent;")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setWordWrap(True)
+        layout.addWidget(lbl)
+
+        layout.addStretch()
+
+        btn = QPushButton("OK")
+        btn.setFixedHeight(38)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setStyleSheet(f"""
+            QPushButton {{ background: rgba({ar},0.1); color: {a};
+                border: 1px solid rgba({ar},0.4); border-radius: 4px;
+                font-weight: bold; font-size: 11px; }}
+            QPushButton:hover {{ background: {a}; color: white; }}
+        """)
+        btn.clicked.connect(self.accept)
+        layout.addWidget(btn)
+
+
+class ExtractHintDialog(QDialog):
+    """Mensaje estético cuando IMPORT FROM RAR falla — sugiere extraer manualmente."""
+    def __init__(self, parent, lang, theme="blue"):
+        super().__init__(parent)
+        t = THEMES[theme]; a = t["accent"]; ar = t["accent_rgba"]; pb = t["panel_bg"]
+        self.setWindowTitle("NFS Garage")
+        self.setFixedSize(420, 230)
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint | Qt.WindowType.MSWindowsFixedSizeDialogHint)
+        self.setStyleSheet(f"QDialog {{ background-color: {pb}; }}")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(35, 30, 35, 30)
+        layout.setSpacing(14)
+
+        icon_lbl = QLabel("⚠")
+        icon_lbl.setStyleSheet("color: #E67E22; font-size: 28px; background: transparent;")
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(icon_lbl)
+
+        if lang == "EN":
+            msg = "Could not process this archive automatically.<br><br>In the <b>IMPORT FROM RAR</b> section, locate your file,<br>extract it with right-click → Extract here,<br>then use <b>IMPORT FROM FOLDER</b> to select the extracted folder."
+        else:
+            msg = "No se pudo procesar este archivo automáticamente.<br><br>En la sección <b>IMPORTAR RAR</b>, ubique su archivo,<br>extráigalo con click derecho → Extraer aquí,<br>luego use <b>IMPORTAR CARPETA</b> para seleccionar la carpeta extraída."
+
+        lbl = QLabel(msg)
+        lbl.setTextFormat(Qt.TextFormat.RichText)
+        lbl.setStyleSheet("color: rgba(255,255,255,0.85); font-size: 11px; background: transparent;")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setWordWrap(True)
+        layout.addWidget(lbl)
+
+        layout.addStretch()
+
+        btn = QPushButton("OK")
+        btn.setFixedHeight(38)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setStyleSheet(f"""
+            QPushButton {{ background: rgba({ar},0.1); color: {a};
+                border: 1px solid rgba({ar},0.4); border-radius: 4px;
+                font-weight: bold; font-size: 11px; }}
+            QPushButton:hover {{ background: {a}; color: white; }}
+        """)
+        btn.clicked.connect(self.accept)
+        layout.addWidget(btn)
+
+
 class ModPreviewDialog(QDialog):
     """Ventana de vista previa antes de instalar el mod."""
-    def __init__(self, parent, car_name, bin_labels, lang, will_replace=False):
+    def __init__(self, parent, car_name, bin_labels, lang, will_replace=False, theme="blue"):
         super().__init__(parent)
-        self.setWindowTitle("MOD PREVIEW" if lang == "EN" else "VISTA PREVIA")
+        t = THEMES[theme]; a = t["accent"]; ar = t["accent_rgba"]; pb = t["panel_bg"]
+        self.setWindowTitle("mod preview" if lang == "EN" else "vista previa")
         self.setFixedSize(460, 300)
-        self.setStyleSheet("QWidget { background-color: #050A14; }")
+        self.setStyleSheet(f"QWidget {{ background-color: {pb}; }}")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(35, 30, 35, 30)
@@ -134,20 +255,20 @@ class ModPreviewDialog(QDialog):
 
         # Título
         title = QLabel("MOD PREVIEW" if lang == "EN" else "VISTA PREVIA DEL MOD")
-        title.setStyleSheet("color: #4A90E2; font-size: 13px; font-weight: bold; letter-spacing: 2px;")
+        title.setStyleSheet(f"color: {a}; font-size: 13px; font-weight: bold; letter-spacing: 2px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
         # Separador
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("background: rgba(74,144,226,0.3); border: none;")
+        sep.setStyleSheet(f"background: rgba({ar},0.3); border: none;")
         sep.setFixedHeight(1)
         layout.addWidget(sep)
 
         # Carpeta del auto
         lbl_car_title = QLabel("FOLDER TO INSTALL:" if lang == "EN" else "CARPETA A INSTALAR:")
-        lbl_car_title.setStyleSheet("color: rgba(74,144,226,0.5); font-size: 9px; font-weight: bold; letter-spacing: 1px;")
+        lbl_car_title.setStyleSheet(f"color: rgba({ar},0.5); font-size: 9px; font-weight: bold; letter-spacing: 1px;")
         layout.addWidget(lbl_car_title)
 
         lbl_car = QLabel(car_name.upper() if car_name != "Not detected" else "— NOT DETECTED —")
@@ -155,16 +276,9 @@ class ModPreviewDialog(QDialog):
         lbl_car.setStyleSheet(f"color: {car_color}; font-size: 14px; font-weight: bold;")
         layout.addWidget(lbl_car)
 
-        # Aviso de sustitución
-        if will_replace:
-            lbl_warn = QLabel("⚠  " + ("This mod will replace an existing installation" if lang == "EN" else "Este mod reemplazará una instalación existente"))
-            lbl_warn.setStyleSheet("color: #E67E22; font-size: 9px; font-weight: bold; margin-top: 2px;")
-            lbl_warn.setWordWrap(True)
-            layout.addWidget(lbl_warn)
-
         # BINs
         lbl_bin_title = QLabel("MANUFACTURER BIN:" if lang == "EN" else "BIN DE FABRICANTE:")
-        lbl_bin_title.setStyleSheet("color: rgba(74,144,226,0.5); font-size: 9px; font-weight: bold; letter-spacing: 1px;")
+        lbl_bin_title.setStyleSheet(f"color: rgba({ar},0.5); font-size: 9px; font-weight: bold; letter-spacing: 1px;")
         layout.addWidget(lbl_bin_title)
 
         lbl_bin = QLabel(bin_labels if bin_labels != "None" else "— NONE —")
@@ -172,6 +286,13 @@ class ModPreviewDialog(QDialog):
         lbl_bin.setStyleSheet(f"color: {bin_color}; font-size: 11px;")
         lbl_bin.setWordWrap(True)
         layout.addWidget(lbl_bin)
+
+        # Aviso de sustitución — debajo del BIN
+        if will_replace:
+            lbl_warn = QLabel("⚠  " + ("This mod will replace an existing installation" if lang == "EN" else "Este mod reemplazará una instalación existente"))
+            lbl_warn.setStyleSheet("color: #E67E22; font-size: 9px; font-weight: bold; margin-top: 2px;")
+            lbl_warn.setWordWrap(True)
+            layout.addWidget(lbl_warn)
 
         layout.addStretch()
 
@@ -193,9 +314,9 @@ class ModPreviewDialog(QDialog):
         btn_install.setFixedHeight(40)
         btn_install.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_install.setStyleSheet("""
-            QPushButton { background: rgba(74,144,226,0.1); color: #4A90E2;
-                border: 1px solid rgba(74,144,226,0.4); border-radius: 4px; font-weight: bold; font-size: 11px; }
-            QPushButton:hover { background: #4A90E2; color: white; border-color: #4A90E2; }
+            QPushButton {{ background: rgba({ar},0.1); color: {a};
+                border: 1px solid rgba({ar},0.4); border-radius: 4px; font-weight: bold; font-size: 11px; }}
+            QPushButton:hover {{ background: {a}; color: white; border-color: {a}; }}
         """)
         btn_install.clicked.connect(self._confirm)
 
@@ -217,11 +338,12 @@ class ModLoaderGUI(QWidget):
         super().__init__()
 
         # ── Ícono portable ──────────────────────────────────────────────
-        icon_path = resource_path("icon.ico")
+        icon_path = resource_path("icon.png")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
-        self.lang = initial_lang
+        self.lang = initial_lang if initial_lang else "ES"
+        self.theme = "blue"  # tema por defecto
         self.texts = {
             "EN": {
                 "title": "NFS Garage",
@@ -240,7 +362,7 @@ class ModLoaderGUI(QWidget):
                 "error_exe": "Invalid folder. speed.exe is required.",
                 "success_ml": "ModLoader installed correctly.",
                 "mod_installed": "Mod installed",
-                "no_content": "No valid content detected.",
+                "no_content": "No valid content detected.\nTry extracting manually and use IMPORT FROM FOLDER.",
                 "confirm_del": "Permanently delete",
                 "mod_replaced": "This mod will replace an existing installation",
                 "how_to_use": "How to use?",
@@ -264,7 +386,7 @@ class ModLoaderGUI(QWidget):
                 "error_exe": "Carpeta inválida. Se requiere speed.exe.",
                 "success_ml": "ModLoader instalado correctamente.",
                 "mod_installed": "Mod instalado",
-                "no_content": "No se detectó contenido válido.",
+                "no_content": "No se detectó contenido válido.\nIntente extraer manualmente y use IMPORTAR CARPETA.",
                 "confirm_del": "¿Eliminar permanentemente",
                 "mod_replaced": "Este mod reemplazará una instalación existente",
                 "how_to_use": "¿Cómo usar?",
@@ -283,8 +405,9 @@ class ModLoaderGUI(QWidget):
         )
 
         # ── Rutas de datos del usuario (portables) ─────────────────────
-        self.config_file  = user_data_path("config.txt")
-        self.history_file = user_data_path("history.json")
+        self.config_file   = user_data_path("config.txt")
+        self.history_file  = user_data_path("history.json")
+        self.settings_file = user_data_path("settings.json")
 
         self.game_path = ""
         self.stars = [Star(700, 800) for _ in range(200)]
@@ -293,6 +416,7 @@ class ModLoaderGUI(QWidget):
         self.timer.start(30)
 
         self.load_configuration()
+        self.load_settings()
         self.init_ui()
         self.load_persistent_history()
         self.check_modloader_status()
@@ -304,6 +428,20 @@ class ModLoaderGUI(QWidget):
             return ctypes.windll.shell32.IsUserAnAdmin()
         except:
             return False
+
+    def load_settings(self):
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.lang  = data.get("lang",  "ES")
+                    self.theme = data.get("theme", "blue")
+            except:
+                pass
+
+    def save_settings(self):
+        with open(self.settings_file, "w", encoding="utf-8") as f:
+            json.dump({"lang": self.lang, "theme": self.theme}, f)
 
     def load_configuration(self):
         if os.path.exists(self.config_file):
@@ -319,7 +457,7 @@ class ModLoaderGUI(QWidget):
         QTimer.singleShot(100, self._show_path_dialog)
 
     def _show_path_dialog(self):
-        QMessageBox.information(self, "NFS Garage", self.texts[self.lang]["select_game"])
+        self.themed_msg("NFS Garage", self.texts[self.lang]["select_game"], "info")
         path = QFileDialog.getExistingDirectory(self, "Select Game Folder")
         if path and os.path.exists(os.path.join(path, "speed.exe")):
             path = os.path.normpath(path)
@@ -328,7 +466,7 @@ class ModLoaderGUI(QWidget):
             self.game_path = path
             self.update_internal_paths(path)
         else:
-            QMessageBox.critical(self, "Error", self.texts[self.lang]["error_exe"])
+            self.themed_msg("Error", self.texts[self.lang]["error_exe"], "error")
             sys.exit()
 
     def update_internal_paths(self, path):
@@ -344,18 +482,34 @@ class ModLoaderGUI(QWidget):
     def update_background(self):
         for star in self.stars:
             star.move(self.width(), self.height())
+        # Actualizar library si está abierta
+        if hasattr(self, "ventana_bib") and self.ventana_bib and self.ventana_bib.isVisible():
+            t = THEMES[self.theme]
+            pb = t["panel_bg"]
+            ar = t["accent_rgba"]
+            self.ventana_bib.setStyleSheet(f"QWidget {{ background-color: {pb}; }}")
+            search_style = f"QLineEdit {{ background: rgba(255,255,255,0.04); border: 1px solid rgba({ar},0.2); border-radius: 4px; color: rgba(255,255,255,0.7); font-size: 10px; padding: 4px 8px; }} QLineEdit:focus {{ border: 1px solid rgba({ar},0.6); color: white; }}"
+            if hasattr(self, "search_cars"): self.search_cars.setStyleSheet(search_style)
+            if hasattr(self, "search_bins"): self.search_bins.setStyleSheet(search_style)
+            if hasattr(self, "lbl_lib_models"): self.lbl_lib_models.setStyleSheet(f"color: rgba({ar},0.5); font-weight: bold; font-size: 10px; margin-left: 5px;")
+            if hasattr(self, "lbl_lib_bins"): self.lbl_lib_bins.setStyleSheet(f"color: rgba({ar},0.5); font-weight: bold; font-size: 10px; margin-left: 5px;")
+
         self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        t = THEMES[self.theme]
+        bg_top = [int(x) for x in t["bg_top"].split(",")]
+        bg_bot = [int(x) for x in t["bg_bot"].split(",")]
+        sc = [int(x) for x in t["star_color"].split(",")]
         gradient = QLinearGradient(0, 0, 0, self.height())
-        gradient.setColorAt(0, QColor(5, 10, 20))
-        gradient.setColorAt(1, QColor(2, 4, 8))
+        gradient.setColorAt(0, QColor(*bg_top))
+        gradient.setColorAt(1, QColor(*bg_bot))
         painter.fillRect(self.rect(), QBrush(gradient))
         painter.setPen(Qt.PenStyle.NoPen)
         for star in self.stars:
-            painter.setBrush(QColor(255, 255, 255, star.alpha))
+            painter.setBrush(QColor(sc[0], sc[1], sc[2], star.alpha))
             painter.drawEllipse(QPointF(star.x, star.y), star.size, star.size)
 
     # ── UI ───────────────────────────────────────────────────────────────
@@ -370,26 +524,18 @@ class ModLoaderGUI(QWidget):
         self.btn_menu = QPushButton("≡")
         self.btn_menu.setFixedSize(35, 30)
         self.btn_menu.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_menu.setStyleSheet("QPushButton { color: white; font-size: 24px; background: transparent; border: none; } QPushButton:hover { color: #4A90E2; }")
+        self.btn_menu.setStyleSheet("QPushButton { color: white; font-size: 24px; background: transparent; border: none; } QPushButton:hover { color: #4A90E2; }")  # THEME_BTN_MENU
         self.btn_menu.clicked.connect(self.toggle_side_menu)
 
-        self.btn_lang = QPushButton(self.lang)
-        self.btn_lang.setFixedSize(45, 30)
-        self.btn_lang.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_lang.setStyleSheet("""
-            QPushButton {
-                color: white; font-weight: bold;
-                background: rgba(74,144,226,0.05);
-                border: 1px solid rgba(74,144,226,0.2);
-                border-radius: 4px;
-            }
-            QPushButton:hover { background: #4A90E2; border: 1px solid #4A90E2; }
-        """)
-        self.btn_lang.clicked.connect(self.toggle_language)
+        self.btn_settings = QPushButton("⚙")
+        self.btn_settings.setFixedSize(35, 30)
+        self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_settings.setStyleSheet("QPushButton { color: white; font-size: 18px; background: transparent; border: none; } QPushButton:hover { color: #4A90E2; }")  # THEME_BTN_SETTINGS
+        self.btn_settings.clicked.connect(self.open_settings)
 
         header.addWidget(self.btn_menu)
         header.addStretch()
-        header.addWidget(self.btn_lang)
+        header.addWidget(self.btn_settings)
         self.layout_principal.addLayout(header)
         self.layout_principal.addStretch(1)
 
@@ -448,13 +594,21 @@ class ModLoaderGUI(QWidget):
 
         self.btn_close = QPushButton("←")
         self.btn_close.setFixedSize(30, 30)
-        self.btn_close.setStyleSheet("QPushButton { color: #4A90E2; font-size: 22px; background: transparent; border: none; } QPushButton:hover { color: white; }")
+
+
+        self.btn_close.setStyleSheet("QPushButton { color: rgba(255,255,255,0.4); font-size: 22px; background: transparent; border: none; } QPushButton:hover { color: white; }")
         self.btn_close.clicked.connect(self.toggle_side_menu)
 
         header_h.addWidget(self.lbl_h_title)
         header_h.addStretch()
         header_h.addWidget(self.btn_close)
         layout_h.addLayout(header_h)
+
+        self.search_history = QLineEdit()
+        self.search_history.setFixedHeight(28)
+        self.search_history.setStyleSheet("")
+        self.search_history.textChanged.connect(self._filter_history)
+        layout_h.addWidget(self.search_history)
 
         self.list_history = QListWidget()
         self.list_history.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -470,6 +624,7 @@ class ModLoaderGUI(QWidget):
                 background: rgba(74, 144, 226, 0.35); border-radius: 2px; min-height: 20px;
             }
             QScrollBar::handle:vertical:hover { background: rgba(74, 144, 226, 0.7); }
+            /* THEME_SCROLL_HISTORY */
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px; background: none; border: none;
             }
@@ -514,6 +669,7 @@ class ModLoaderGUI(QWidget):
         self.btn_how.clicked.connect(self.show_how_to_use)
         self.btn_how.show()
         self.btn_how.raise_()
+        self.apply_theme()
 
         # ── Welcome panel con esquina redondeada ─────────────────────────
         self.welcome_panel = QFrame(self)
@@ -575,22 +731,27 @@ class ModLoaderGUI(QWidget):
                 """)
 
     def show_how_to_use(self):
+        t = THEMES[self.theme]
+        a = t["accent"]
+        ar = t["accent_rgba"]
+        pb = t["panel_bg"]
+
         dlg = QDialog(self)
         dlg.setWindowTitle("How to use" if self.lang == "EN" else "Cómo usar")
         dlg.setFixedSize(500, 560)
         dlg.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint | Qt.WindowType.MSWindowsFixedSizeDialogHint)
-        dlg.setStyleSheet("QDialog { background-color: #050A14; }")
+        dlg.setStyleSheet(f"QDialog {{ background-color: {pb}; }}")
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(35, 30, 35, 30)
 
         title = QLabel("HOW TO USE" if self.lang == "EN" else "CÓMO USAR")
-        title.setStyleSheet("color: #4A90E2; font-size: 14px; font-weight: bold; letter-spacing: 2px;")
+        title.setStyleSheet(f"color: {a}; font-size: 14px; font-weight: bold; letter-spacing: 2px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(title)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("background: rgba(74,144,226,0.3); border: none; margin: 8px 0;")
+        sep.setStyleSheet(f"background: rgba({ar},0.3); border: none; margin: 8px 0;")
         sep.setFixedHeight(1)
         lay.addWidget(sep)
 
@@ -605,9 +766,178 @@ class ModLoaderGUI(QWidget):
 
     # ── Idioma ───────────────────────────────────────────────────────────
 
+
+    def open_settings(self):
+        t = THEMES[self.theme]
+        a = t["accent"]
+        ar = t["accent_rgba"]
+        pb = t["panel_bg"]
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Settings" if self.lang == "EN" else "Ajustes")
+        dlg.setFixedSize(360, 320)
+        dlg.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint | Qt.WindowType.MSWindowsFixedSizeDialogHint)
+        dlg.setStyleSheet(f"QDialog {{ background-color: {pb}; }}")
+
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(35, 30, 35, 30)
+        lay.setSpacing(18)
+
+        # Título
+        lbl_title = QLabel("SETTINGS" if self.lang == "EN" else "AJUSTES")
+        lbl_title.setStyleSheet(f"color: {a}; font-size: 14px; font-weight: bold; letter-spacing: 2px;")
+        lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(lbl_title)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f"background: rgba({ar},0.3); border: none;")
+        sep.setFixedHeight(1)
+        lay.addWidget(sep)
+
+        # Idioma
+        lbl_lang = QLabel("LANGUAGE" if self.lang == "EN" else "IDIOMA")
+        lbl_lang.setStyleSheet(f"color: rgba({ar},0.6); font-size: 9px; font-weight: bold; letter-spacing: 1px;")
+        lay.addWidget(lbl_lang)
+
+        lang_row = QHBoxLayout()
+        lang_row.setSpacing(10)
+        btn_style_lang = lambda active: f"""QPushButton {{
+            background: {"rgba(" + ar + ",0.15)" if active else "transparent"};
+            color: {a if active else "rgba(255,255,255,0.4)"};
+            border: 1px solid {"rgba(" + ar + ",0.6)" if active else "rgba(255,255,255,0.1)"};
+            border-radius: 4px; font-weight: bold; font-size: 11px; min-height: 32px;
+        }} QPushButton:hover {{ background: rgba({ar},0.15); color: {a}; border-color: rgba({ar},0.6); }}"""
+
+        btn_en = QPushButton("English")
+        btn_es = QPushButton("Español")
+        btn_en.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_es.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_en.setStyleSheet(btn_style_lang(self.lang == "EN"))
+        btn_es.setStyleSheet(btn_style_lang(self.lang == "ES"))
+
+        def set_lang(l):
+            self.lang = l
+            self.update_ui_texts()
+            self.save_settings()
+            dlg.close()
+            self.open_settings()
+
+        btn_en.clicked.connect(lambda: set_lang("EN"))
+        btn_es.clicked.connect(lambda: set_lang("ES"))
+        lang_row.addWidget(btn_en)
+        lang_row.addWidget(btn_es)
+        lay.addLayout(lang_row)
+
+        # Tema
+        lbl_theme = QLabel("THEME" if self.lang == "EN" else "TEMA")
+        lbl_theme.setStyleSheet(f"color: rgba({ar},0.6); font-size: 9px; font-weight: bold; letter-spacing: 1px;")
+        lay.addWidget(lbl_theme)
+
+        theme_row = QHBoxLayout()
+        theme_row.setSpacing(10)
+
+        theme_labels = {"blue": ("Blue" if self.lang == "EN" else "Azul"), "purple": ("Purple" if self.lang == "EN" else "Morado"), "black": ("Black" if self.lang == "EN" else "Negro")}
+        theme_colors = {"blue": "#4A90E2", "purple": "#9B59B6", "black": "#C0C0C0"}
+
+        for key, label in theme_labels.items():
+            tc = theme_colors[key]
+            btn_t = QPushButton(label)
+            btn_t.setCursor(Qt.CursorShape.PointingHandCursor)
+            is_active = self.theme == key
+            btn_t.setStyleSheet(f"""QPushButton {{
+                background: {"rgba(" + tc.lstrip("#") + ",0.15)" if is_active else "transparent"};
+                color: {tc if is_active else "rgba(255,255,255,0.4)"};
+                border: 1px solid {tc if is_active else "rgba(255,255,255,0.1)"};
+                border-radius: 4px; font-weight: bold; font-size: 10px; min-height: 32px;
+            }} QPushButton:hover {{ color: {tc}; border-color: {tc}; }}""")
+
+            def make_set_theme(k):
+                def _set():
+                    self.apply_theme(k)
+                    self.save_settings()
+                    dlg.close()
+                    self.open_settings()
+                return _set
+
+            btn_t.clicked.connect(make_set_theme(key))
+            theme_row.addWidget(btn_t)
+
+        lay.addLayout(theme_row)
+        lay.addStretch()
+        dlg.exec()
+
+    def apply_theme(self, theme_name=None):
+        if theme_name:
+            self.theme = theme_name
+        t = THEMES[self.theme]
+        a = t["accent"]
+        ar = t["accent_rgba"]
+        pb = t["panel_bg"]
+
+        # Botones principales
+        estilo_btn = f"""
+            QPushButton {{
+                background-color: rgba(255,255,255,0.02);
+                color: {a};
+                border: 1px solid rgba({ar},0.15);
+                border-radius: 4px;
+                font-size: 13px;
+                font-weight: bold;
+                min-width: 280px;
+                min-height: 48px;
+            }}
+            QPushButton:hover {{ background-color: rgba({ar},0.08); border: 1px solid {a}; color: white; }}
+            QPushButton:disabled {{ color: #2ECC71; border: 1px solid rgba(46,204,113,0.2); }}
+        """
+        for btn in [self.btn_install_base, self.btn_import, self.btn_import_rar,
+                    self.btn_library, self.btn_mods_folder, self.btn_launch]:
+            btn.setStyleSheet(estilo_btn)
+
+        # Panel historial
+        self.panel_history.setStyleSheet(f"QFrame {{ background-color: {pb}; border-right: 1px solid rgba({ar},0.3); }}")
+
+        # Scrollbar historial
+        scroll_list_style = f"""
+            QListWidget {{ background: transparent; border: none; color: white; outline: none; }}
+            QListWidget::item {{ border: none; background: transparent; }}
+            QListWidget::item:selected {{ background: transparent; }}
+            QScrollBar:vertical {{ width: 4px; background: transparent; margin: 4px 0px; border: none; }}
+            QScrollBar::handle:vertical {{ background: rgba({ar},0.35); border-radius: 2px; min-height: 20px; }}
+            QScrollBar::handle:vertical:hover {{ background: rgba({ar},0.7); }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; background: none; border: none; }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
+        """
+        if hasattr(self, "list_history"):
+            self.list_history.setStyleSheet(scroll_list_style)
+        if hasattr(self, "list_cars"):
+            self.list_cars.setStyleSheet(scroll_list_style)
+        if hasattr(self, "list_bins"):
+            self.list_bins.setStyleSheet(scroll_list_style)
+
+        # Botón menú
+        self.btn_menu.setStyleSheet(f"QPushButton {{ color: white; font-size: 24px; background: transparent; border: none; }} QPushButton:hover {{ color: {a}; }}")
+
+        # Botón settings
+        self.btn_settings.setStyleSheet(f"QPushButton {{ color: white; font-size: 18px; background: transparent; border: none; }} QPushButton:hover {{ color: {a}; }}")
+
+        # How to use
+        search_style = f"QLineEdit {{ background: rgba(255,255,255,0.04); border: 1px solid rgba({ar},0.2); border-radius: 4px; color: rgba(255,255,255,0.7); font-size: 10px; padding: 4px 8px; }} QLineEdit:focus {{ border: 1px solid rgba({ar},0.6); color: white; }}"
+        if hasattr(self, "search_history"):
+            self.search_history.setStyleSheet(search_style)
+
+        self.btn_close.setStyleSheet(f"QPushButton {{ color: rgba(255,255,255,0.3); font-size: 22px; background: transparent; border: none; }} QPushButton:hover {{ color: {a}; }}")
+
+        self.btn_how.setStyleSheet(f"""
+            QPushButton {{ color: rgba(255,255,255,0.4); background: transparent; border: none;
+                font-size: 11px; text-decoration: underline; font-family: Georgia, serif; }}
+            QPushButton:hover {{ color: white; }}
+        """)
+
+        self.update()
+
     def toggle_language(self):
         self.lang = "ES" if self.lang == "EN" else "EN"
-        self.btn_lang.setText(self.lang)
         self.update_ui_texts()
 
     def update_ui_texts(self):
@@ -622,6 +952,8 @@ class ModLoaderGUI(QWidget):
         self.btn_clear.setText(t["clear_hist"])
         if hasattr(self, "btn_how"):
             self.btn_how.setText(t["how_to_use"])
+        if hasattr(self, "search_history"):
+            self.search_history.setPlaceholderText("Buscar carpeta" if self.lang == "ES" else "Search folder")
 
     # ── ModLoader ────────────────────────────────────────────────────────
 
@@ -640,9 +972,9 @@ class ModLoaderGUI(QWidget):
             os.makedirs(os.path.join(self.addons_path, "CARS_REPLACE"),             exist_ok=True)
             os.makedirs(os.path.join(self.addons_path, "FRONTEND", "MANUFACTURERS"), exist_ok=True)
             self.check_modloader_status()
-            QMessageBox.information(self, "Success", self.texts[self.lang]["success_ml"])
+            self.themed_msg("Success" if self.lang == "EN" else "Éxito", self.texts[self.lang]["success_ml"], "info")
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            self.themed_msg("Error", str(e), "error")
 
     # ── Menú lateral ─────────────────────────────────────────────────────
 
@@ -658,7 +990,7 @@ class ModLoaderGUI(QWidget):
         if os.path.exists(self.game_exe):
             subprocess.Popen([self.game_exe], cwd=self.game_path, shell=False)
         else:
-            QMessageBox.warning(self, "Error", "speed.exe not found")
+            self.themed_msg("Error", "speed.exe not found", "warn")
 
     def open_mods_folder(self):
         if os.path.exists(self.addons_path):
@@ -668,7 +1000,7 @@ class ModLoaderGUI(QWidget):
 
     def select_rar(self):
         """Selecciona un archivo comprimido y lo instala automáticamente."""
-        title = "Select mod Archive" if self.lang == "EN" else "Seleccione el archivo del mod"
+        title = "Select mod archive" if self.lang == "EN" else "Seleccione el archivo del mod"
         path, _ = QFileDialog.getOpenFileName(
             self, title, "",
             "Compressed files (*.rar *.zip *.7z)"
@@ -680,21 +1012,23 @@ class ModLoaderGUI(QWidget):
                     shutil.rmtree(temp_dir)
                 os.makedirs(temp_dir)
                 self.extract_archive(path, temp_dir)
-                self.import_logic(temp_dir, "folder")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", str(e))
+                self.import_logic(temp_dir, "rar_extracted")
+            except Exception:
+                ExtractHintDialog(self, self.lang, self.theme).exec()
+            # También mostrar hint si no se detectó contenido válido
             finally:
                 if os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir)
 
     def select_file(self):
-        title = "Select mod Folder" if self.lang == "EN" else "Seleccione la carpeta del mod"
+        # Un solo explorador nativo — selecciona carpeta directamente
+        title = "Select mod folder" if self.lang == "EN" else "Seleccione la carpeta del mod"
         path = QFileDialog.getExistingDirectory(self, title)
         if path:
             self.import_logic(path, "folder")
 
-    def extract_archive(self, archive_path, dest_dir):
-        """Extrae cualquier formato soportado al directorio destino."""
+    def extract_single(self, archive_path, dest_dir):
+        """Extrae un solo archivo comprimido a dest_dir."""
         ext = os.path.splitext(archive_path)[1].lower()
         if ext == ".rar":
             with rarfile.RarFile(archive_path) as rf:
@@ -707,9 +1041,41 @@ class ModLoaderGUI(QWidget):
                 with py7zr.SevenZipFile(archive_path, mode='r') as zf:
                     zf.extractall(dest_dir)
             else:
-                raise Exception("7z support requires py7zr: pip install py7zr")
+                # Fallback: intentar con 7-Zip si está instalado en el sistema
+                seven_zip = r"C:\Program Files\7-Zip\7z.exe"
+                if os.path.exists(seven_zip):
+                    subprocess.run([seven_zip, "x", archive_path, f"-o{dest_dir}", "-y"], check=True)
+                else:
+                    raise Exception("Para archivos .7z instale py7zr: pip install py7zr")
         else:
             raise Exception(f"Unsupported format: {ext}")
+
+    def extract_archive(self, archive_path, dest_dir):
+        """Extracción recursiva — desempaca RARs dentro de RARs hasta que no quede nada comprimido."""
+        COMPRESSED_EXTS = {".rar", ".zip", ".7z"}
+        MAX_DEPTH = 6  # seguridad contra loops infinitos
+
+        # Extraer el archivo raíz
+        self.extract_single(archive_path, dest_dir)
+
+        # Buscar y extraer recursivamente cualquier comprimido adentro
+        for depth in range(MAX_DEPTH):
+            found_any = False
+            for root, dirs, files in os.walk(dest_dir):
+                for f in files:
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext in COMPRESSED_EXTS:
+                        nested_path = os.path.join(root, f)
+                        nested_dest = os.path.join(root, os.path.splitext(f)[0])
+                        os.makedirs(nested_dest, exist_ok=True)
+                        try:
+                            self.extract_single(nested_path, nested_dest)
+                            os.remove(nested_path)  # eliminar el comprimido ya extraído
+                            found_any = True
+                        except Exception:
+                            pass  # si falla uno, continúa con los demás
+            if not found_any:
+                break  # no quedaron más comprimidos, listo
 
     def import_logic(self, source_path, import_type):
         temp_dir = os.path.join(os.environ["TEMP"], "nfs_work_dir")
@@ -720,53 +1086,50 @@ class ModLoaderGUI(QWidget):
                 os.makedirs(temp_dir)
                 self.extract_archive(source_path, temp_dir)
                 work_path = temp_dir
+            elif import_type == "rar_extracted":
+                work_path = source_path
             else:
                 work_path = source_path
 
             car_folder_src, car_name, bins_to_move = None, "Not detected", []
 
-            # ── Señales de carpeta de auto ───────────────────────────────
-            # Busca por nombre base SIN extensión (insensible a mayúsculas)
-            # Cubre: GEOMETRY.BIN, geometry.bin, GEOMETRY, Geometry, etc.
+            # ── Señales de carpeta de auto ────────────────────────────────
             CAR_SIGNALS_BASE = {"geometry", "car", "fe", "attributes", "vinyls",
                                 "colors", "damage", "textures", "secondarylogo"}
 
-            # BINs de marcas: nombre empieza con número (ej: 101-NISSAN, 27-FORD_HD)
             def is_manufacturer_bin(filename):
                 base = os.path.splitext(filename)[0]
                 return base[0].isdigit() if base else False
 
-            def get_car_signals(files):
-                """Retorna cuántas señales de auto hay en la lista de archivos."""
+            def is_car_folder(files):
                 bases = {os.path.splitext(f)[0].lower() for f in files}
-                return len(CAR_SIGNALS_BASE & bases)
+                return "geometry" in bases or len(CAR_SIGNALS_BASE & bases) >= 2
 
+            # ── Búsqueda exhaustiva en TODO el árbol extraído ─────────────
+            # No importa cuántos niveles de carpetas haya — busca en todos
             for root, dirs, files in os.walk(work_path):
-                in_frontend = any(p in root.upper() for p in ["FRONTEND", "MANUFACTURERS"])
+                root_upper = root.upper().replace(os.sep, "/")
+                in_frontend = any(p in root_upper for p in ["FRONTEND", "MANUFACTURERS"])
 
-                # Detectar carpeta de auto: tiene GEOMETRY o al menos 2 señales
-                bases = {os.path.splitext(f)[0].lower() for f in files}
-                has_geometry = "geometry" in bases
-                signal_count = len(CAR_SIGNALS_BASE & bases)
+                # Prioridad 1: estructura CARS_REPLACE ya organizada
+                if ("CARS_REPLACE" in root_upper or "CARS REPLACE" in root_upper) and not in_frontend:
+                    for d in sorted(dirs):
+                        candidate = os.path.join(root, d)
+                        if os.path.isdir(candidate):
+                            car_folder_src = candidate
+                            car_name = d
+                            break
 
-                if (has_geometry or signal_count >= 2) and not in_frontend:
+                # Prioridad 2: carpeta con señales de auto
+                if car_folder_src is None and not in_frontend and is_car_folder(files):
                     car_folder_src = root
                     car_name = os.path.basename(root)
 
-                # Detectar BINs de marcas: nombre empieza con número
+                # BINs de fabricante — en cualquier nivel
                 for f in files:
-                    ext = os.path.splitext(f)[1].lower()
-                    if ext == ".bin" and is_manufacturer_bin(f):
-                        bins_to_move.append(os.path.join(root, f))
-
-            # Si seleccionó directamente la carpeta raíz del auto
-            if car_folder_src is None and not bins_to_move:
-                files = [f for f in os.listdir(work_path)
-                         if os.path.isfile(os.path.join(work_path, f))]
-                bases = {os.path.splitext(f)[0].lower() for f in files}
-                if "geometry" in bases or len(CAR_SIGNALS_BASE & bases) >= 2:
-                    car_folder_src = work_path
-                    car_name = os.path.basename(work_path)
+                    if f.lower().endswith(".bin") and is_manufacturer_bin(f):
+                        if os.path.join(root, f) not in bins_to_move:
+                            bins_to_move.append(os.path.join(root, f))
 
             if car_folder_src or bins_to_move:
                 bin_labels = ", ".join(os.path.basename(x) for x in bins_to_move) if bins_to_move else "None"
@@ -774,9 +1137,12 @@ class ModLoaderGUI(QWidget):
                 # ── Vista previa antes de instalar ───────────────────────
                 _dest_check = os.path.join(self.addons_path, "CARS_REPLACE", car_name)
                 _will_replace = os.path.exists(_dest_check)
-                preview = ModPreviewDialog(self, car_name, bin_labels, self.lang, _will_replace)
+                preview = ModPreviewDialog(self, car_name, bin_labels, self.lang, _will_replace, self.theme)
                 if not preview.exec():
                     return  # Usuario canceló
+
+                nickname = self.ask_car_nickname(car_name, bin_labels)
+                print(f"DEBUG nickname='{nickname}' type={type(nickname)}")
 
                 if car_folder_src:
                     dest_car = os.path.join(self.addons_path, "CARS_REPLACE", car_name)
@@ -790,26 +1156,136 @@ class ModLoaderGUI(QWidget):
                     for b in bins_to_move:
                         shutil.copy2(b, os.path.join(dest_man, os.path.basename(b)))
 
-                self.add_to_history(car_name, bin_labels)
-                self.save_history_to_disk(car_name, bin_labels)
-                QMessageBox.information(self, "Done", f"{self.texts[self.lang]['mod_installed']} {car_name}.\nBINs: {bin_labels}")
+                self.add_to_history(car_name, bin_labels, nickname)
+                self.save_history_to_disk(car_name, bin_labels, nickname)
+                self.themed_msg("Done" if self.lang == "EN" else "Listo", f"{self.texts[self.lang]['mod_installed']} {car_name}.\nBINs: {bin_labels}", "info")
             else:
-                QMessageBox.warning(self, "Error", self.texts[self.lang]["no_content"])
+                if import_type in ("rar", "rar_extracted"):
+                    ExtractHintDialog(self, self.lang, self.theme).exec()
+                else:
+                    FolderHintDialog(self, self.lang, self.theme).exec()
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+        except Exception:
+            if import_type in ("rar", "rar_extracted"):
+                ExtractHintDialog(self, self.lang, self.theme).exec()
+            else:
+                FolderHintDialog(self, self.lang, self.theme).exec()
         finally:
-            if import_type == "rar" and os.path.exists(temp_dir):
+            if import_type in ("rar", "rar_extracted") and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
     # ── Historial ────────────────────────────────────────────────────────
 
-    def add_to_history(self, car_name, bin_names):
+    def themed_msg(self, title, msg, icon="info"):
+        """QMessageBox con el tema elegido."""
+        t = THEMES[self.theme]; a = t["accent"]; ar = t["accent_rgba"]; pb = t["panel_bg"]
+        dlg = QDialog(self)
+        dlg.setWindowTitle(title)
+        dlg.setFixedWidth(380)
+        dlg.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint | Qt.WindowType.MSWindowsFixedSizeDialogHint)
+        dlg.setStyleSheet(f"QDialog {{ background-color: {pb}; }}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(35, 25, 35, 25)
+        lay.setSpacing(14)
+        icon_map = {"info": "✓", "error": "✕", "warn": "⚠"}
+        icon_color = {"info": a, "error": "#E74C3C", "warn": "#E67E22"}
+        lbl_icon = QLabel(icon_map.get(icon, "✓"))
+        lbl_icon.setStyleSheet(f"color: {icon_color.get(icon, a)}; font-size: 24px; background: transparent;")
+        lbl_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(lbl_icon)
+        lbl_msg = QLabel(msg)
+        lbl_msg.setStyleSheet("color: rgba(255,255,255,0.85); font-size: 11px; background: transparent;")
+        lbl_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_msg.setWordWrap(True)
+        lay.addWidget(lbl_msg)
+        lay.addStretch()
+        btn = QPushButton("OK")
+        btn.setFixedHeight(36)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setStyleSheet(f"QPushButton {{ background: rgba({ar},0.1); color: {a}; border: 1px solid rgba({ar},0.4); border-radius: 4px; font-weight: bold; }} QPushButton:hover {{ background: {a}; color: white; }}")
+        btn.clicked.connect(dlg.accept)
+        lay.addWidget(btn)
+        dlg.adjustSize()
+        dlg.exec()
+
+    def ask_car_nickname(self, car_name, bin_labels):
+        """Pide al usuario el nombre del carro a reemplazar."""
+        t = THEMES[self.theme]
+        a = t["accent"]
+        ar = t["accent_rgba"]
+        pb = t["panel_bg"]
+
+        dlg = QDialog(self)
+        title_text = "IMPORT" if self.lang == "EN" else "IMPORTAR"
+        dlg.setWindowTitle(title_text.lower())
+        dlg.setFixedSize(380, 260)
+        dlg.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint | Qt.WindowType.MSWindowsFixedSizeDialogHint)
+        dlg.setStyleSheet(f"QDialog {{ background-color: {pb}; }}")
+
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(35, 30, 35, 30)
+        lay.setSpacing(14)
+
+        lbl_title = QLabel(title_text)
+        lbl_title.setStyleSheet(f"color: {a}; font-size: 13px; font-weight: bold; letter-spacing: 2px;")
+        lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(lbl_title)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f"background: rgba({ar},0.3); border: none;")
+        sep.setFixedHeight(1)
+        lay.addWidget(sep)
+
+        prompt = "Write the name of the model to import" if self.lang == "EN" else "Escriba el nombre del modelo a importar"
+        lbl_prompt = QLabel(prompt)
+        lbl_prompt.setStyleSheet("color: rgba(255,255,255,0.7); font-size: 10px;")
+        lbl_prompt.setWordWrap(True)
+        lay.addWidget(lbl_prompt)
+
+        field = QLineEdit()
+        field.setFixedHeight(34)
+        ex = "Example: Skyline R33" if self.lang == "EN" else "Ejemplo: Skyline R33"
+        field.setPlaceholderText(ex)
+        field.setStyleSheet(f"QLineEdit {{ background: rgba(255,255,255,0.04); border: 1px solid rgba({ar},0.3); border-radius: 4px; color: white; font-size: 12px; padding: 4px 10px; }} QLineEdit:focus {{ border: 1px solid rgba({ar},0.7); }}")
+        lay.addWidget(field)
+
+        lay.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+
+        btn_cancel = QPushButton("CANCEL" if self.lang == "EN" else "CANCELAR")
+        btn_ok = QPushButton("OK")
+        for b in [btn_cancel, btn_ok]:
+            b.setFixedHeight(36)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        btn_cancel.setStyleSheet(f"QPushButton {{ background: transparent; color: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; font-weight: bold; }} QPushButton:hover {{ color: white; border-color: rgba(255,255,255,0.4); }}")
+        btn_ok.setStyleSheet(f"QPushButton {{ background: rgba({ar},0.1); color: {a}; border: 1px solid rgba({ar},0.4); border-radius: 4px; font-weight: bold; }} QPushButton:hover {{ background: rgba({ar},0.2); color: white; }}")
+
+        btn_cancel.clicked.connect(dlg.reject)
+        btn_ok.clicked.connect(dlg.accept)
+        field.returnPressed.connect(dlg.accept)
+
+        btn_row.addWidget(btn_cancel)
+        btn_row.addWidget(btn_ok)
+        lay.addLayout(btn_row)
+
+        dlg.raise_()
+        dlg.activateWindow()
+        field.setFocus()
+        dlg.exec()
+        return field.text().strip() or None
+
+    def add_to_history(self, car_name, bin_names, nickname=None):
         item = QListWidgetItem(self.list_history)
         widget = QWidget()
         lay = QHBoxLayout(widget)
         lay.setContentsMargins(5, 5, 5, 5)
-        txt = QLabel(f"MOD: {car_name.upper()}\nBIN: {bin_names}")
+        nick = (nickname or "").strip()
+        display = f"{car_name.upper()} ({nick.upper()})" if nick else car_name.upper()
+        txt = QLabel(f"MOD: {display}\nBIN: {bin_names}")
         txt.setStyleSheet("color: white; font-size: 10px; background: transparent; border: none;")
         btn = QPushButton("🗑")
         btn.setFixedSize(25, 25)
@@ -822,7 +1298,7 @@ class ModLoaderGUI(QWidget):
         self.list_history.addItem(item)
         self.list_history.setItemWidget(item, widget)
 
-    def save_history_to_disk(self, car, bins):
+    def save_history_to_disk(self, car, bins, nickname=None):
         data = []
         if os.path.exists(self.history_file):
             with open(self.history_file, "r", encoding="utf-8") as f:
@@ -831,7 +1307,9 @@ class ModLoaderGUI(QWidget):
                 except:
                     data = []
         if not any(d["car"] == car for d in data):
-            data.append({"car": car, "bins": bins})
+            entry = {"car": car, "bins": bins}
+            if nickname: entry["nickname"] = nickname
+            data.append(entry)
             with open(self.history_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -840,7 +1318,7 @@ class ModLoaderGUI(QWidget):
             with open(self.history_file, "r", encoding="utf-8") as f:
                 try:
                     for entry in json.load(f):
-                        self.add_to_history(entry["car"], entry["bins"])
+                        self.add_to_history(entry["car"], entry["bins"], entry.get("nickname"))
                 except:
                     pass
 
@@ -863,50 +1341,61 @@ class ModLoaderGUI(QWidget):
     # ── Biblioteca ───────────────────────────────────────────────────────
 
     def open_library(self):
-        if not hasattr(self, "ventana_bib") or self.ventana_bib is None:
-            self.ventana_bib = QWidget(self)
-            self.ventana_bib.setWindowTitle("Library")
-            self.ventana_bib.setFixedSize(500, 650)
-            self.ventana_bib.setWindowFlags(
-                Qt.WindowType.Window |
-                Qt.WindowType.WindowCloseButtonHint |
-                Qt.WindowType.MSWindowsFixedSizeDialogHint
-            )
-            self.ventana_bib.setStyleSheet("QWidget { background-color: #050A14; }")
-            layout_bib = QVBoxLayout(self.ventana_bib)
-            layout_bib.setContentsMargins(30, 30, 30, 30)
-            layout_bib.setSpacing(10)
+        t = THEMES[self.theme]
+        a = t["accent"]; ar = t["accent_rgba"]; pb = t["panel_bg"]
+        search_style = f"QLineEdit {{ background: rgba(255,255,255,0.04); border: 1px solid rgba({ar},0.2); border-radius: 4px; color: rgba(255,255,255,0.7); font-size: 10px; padding: 4px 8px; }} QLineEdit:focus {{ border: 1px solid rgba({ar},0.6); color: white; }}"
 
-            title_lib = QLabel("GARAGE REPOSITORY" if self.lang == "EN" else "REPOSITORIO")
-            title_lib.setStyleSheet("color: #4A90E2; font-size: 16px; font-weight: bold; letter-spacing: 2px; margin-bottom: 20px;")
-            title_lib.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout_bib.addWidget(title_lib)
+        self.ventana_bib = QWidget(self)
+        self.ventana_bib.setWindowTitle("Library")
+        self.ventana_bib.setFixedSize(500, 650)
+        self.ventana_bib.setWindowFlags(
+            Qt.WindowType.Window |
+            Qt.WindowType.WindowCloseButtonHint |
+            Qt.WindowType.MSWindowsFixedSizeDialogHint
+        )
+        self.ventana_bib.setStyleSheet(f"QWidget {{ background-color: {pb}; }}")
+        layout_bib = QVBoxLayout(self.ventana_bib)
+        layout_bib.setContentsMargins(30, 30, 30, 30)
+        layout_bib.setSpacing(10)
 
-            self.lbl_lib_models = QLabel()
-            self.lbl_lib_models.setStyleSheet("color: rgba(74,144,226,0.5); font-weight: bold; font-size: 10px; margin-left: 5px;")
-            layout_bib.addWidget(self.lbl_lib_models)
+        title_lib = QLabel("GARAGE REPOSITORY" if self.lang == "EN" else "REPOSITORIO")
+        title_lib.setStyleSheet(f"color: {a}; font-size: 16px; font-weight: bold; letter-spacing: 2px; margin-bottom: 20px;")
+        title_lib.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout_bib.addWidget(title_lib)
 
-            self.list_cars = QListWidget()
-            self.list_cars.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            self.list_cars.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-            self._apply_list_style(self.list_cars)
-            layout_bib.addWidget(self.list_cars)
+        self.lbl_lib_models = QLabel()
+        self.lbl_lib_models.setStyleSheet(f"color: rgba({ar},0.5); font-weight: bold; font-size: 10px; margin-left: 5px;")
+        layout_bib.addWidget(self.lbl_lib_models)
 
-            sep = QFrame()
-            sep.setFrameShape(QFrame.Shape.HLine)
-            sep.setFixedHeight(3)
-            sep.setStyleSheet("background-color: rgba(74,144,226,0.4); border: none; margin: 10px 0px;")
-            layout_bib.addWidget(sep)
+        self.search_cars = QLineEdit()
+        self.search_cars.setFixedHeight(28)
+        self.search_cars.setStyleSheet(search_style)
+        self.search_cars.setPlaceholderText("Buscar carpeta" if self.lang == "ES" else "Search folder")
+        self.search_cars.textChanged.connect(self._filter_cars)
+        layout_bib.addWidget(self.search_cars)
 
-            self.lbl_lib_bins = QLabel()
-            self.lbl_lib_bins.setStyleSheet("color: rgba(74,144,226,0.5); font-weight: bold; font-size: 10px; margin-left: 5px;")
-            layout_bib.addWidget(self.lbl_lib_bins)
+        self.list_cars = QListWidget()
+        self.list_cars.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.list_cars.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self._apply_list_style(self.list_cars)
+        layout_bib.addWidget(self.list_cars)
 
-            self.list_bins = QListWidget()
-            self.list_bins.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            self.list_bins.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-            self._apply_list_style(self.list_bins)
-            layout_bib.addWidget(self.list_bins)
+        self.lbl_lib_bins = QLabel()
+        self.lbl_lib_bins.setStyleSheet(f"color: rgba({ar},0.5); font-weight: bold; font-size: 10px; margin-left: 5px;")
+        layout_bib.addWidget(self.lbl_lib_bins)
+
+        self.search_bins = QLineEdit()
+        self.search_bins.setFixedHeight(28)
+        self.search_bins.setStyleSheet(search_style)
+        self.search_bins.setPlaceholderText("Buscar BIN" if self.lang == "ES" else "Search BIN")
+        self.search_bins.textChanged.connect(self._filter_bins)
+        layout_bib.addWidget(self.search_bins)
+
+        self.list_bins = QListWidget()
+        self.list_bins.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.list_bins.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self._apply_list_style(self.list_bins)
+        layout_bib.addWidget(self.list_bins)
 
         self.lbl_lib_models.setText(self.texts[self.lang]["lib_models"])
         self.lbl_lib_bins.setText(self.texts[self.lang]["lib_bins"])
@@ -935,12 +1424,12 @@ class ModLoaderGUI(QWidget):
                 border: none;
             }
             QScrollBar::handle:vertical {
-                background: rgba(74, 144, 226, 0.35);
+                background: rgba({ar},0.35);
                 border-radius: 2px;
                 min-height: 20px;
             }
             QScrollBar::handle:vertical:hover {
-                background: rgba(74, 144, 226, 0.7);
+                background: rgba({ar},0.7);
             }
             QScrollBar::add-line:vertical,
             QScrollBar::sub-line:vertical {
@@ -954,9 +1443,47 @@ class ModLoaderGUI(QWidget):
             }
         """)
 
+    def _filter_cars(self, text):
+        for i in range(self.list_cars.count()):
+            item = self.list_cars.item(i)
+            w = self.list_cars.itemWidget(item)
+            label = w.findChild(QLabel) if w else None
+            name = label.text() if label else ""
+            item.setHidden(text.upper() not in name.upper())
+
+    def _filter_bins(self, text):
+        for i in range(self.list_bins.count()):
+            item = self.list_bins.item(i)
+            w = self.list_bins.itemWidget(item)
+            label = w.findChild(QLabel) if w else None
+            name = label.text() if label else ""
+            item.setHidden(text.upper() not in name.upper())
+
+    def _filter_history(self, text):
+        for i in range(self.list_history.count()):
+            item = self.list_history.item(i)
+            w = self.list_history.itemWidget(item)
+            label = w.findChild(QLabel) if w else None
+            name = label.text() if label else ""
+            item.setHidden(text.upper() not in name.upper())
+
     def load_library_data(self):
         self.list_cars.clear()
         self.list_bins.clear()
+
+        # Cargar nicknames del historial
+        nickname_map = {}
+        if os.path.exists(self.history_file):
+            try:
+                with open(self.history_file, "r", encoding="utf-8") as f:
+                    for entry in json.load(f):
+                        if entry.get("nickname"):
+                            nickname_map[entry["car"].upper()] = entry["nickname"]
+            except:
+                pass
+
+        cars_active = cars_inactive = 0
+        bins_active = bins_inactive = 0
 
         for folder, active in [
             (os.path.join(self.addons_path,   "CARS_REPLACE"), True),
@@ -965,7 +1492,10 @@ class ModLoaderGUI(QWidget):
             if os.path.exists(folder):
                 for d in sorted(os.listdir(folder)):
                     if os.path.isdir(os.path.join(folder, d)):
-                        self.create_library_item(self.list_cars, d, "car", active)
+                        nick = nickname_map.get(d.upper())
+                        self.create_library_item(self.list_cars, d, "car", active, nick)
+                        if active: cars_active += 1
+                        else: cars_inactive += 1
 
         for folder, active in [
             (os.path.join(self.addons_path,   "FRONTEND", "MANUFACTURERS"), True),
@@ -974,16 +1504,35 @@ class ModLoaderGUI(QWidget):
             if os.path.exists(folder):
                 for f in sorted(os.listdir(folder)):
                     if f.lower().endswith(".bin"):
-                        self.create_library_item(self.list_bins, f, "bin", active)
+                        self.create_library_item(self.list_bins, f, "bin", active, None)
+                        if active: bins_active += 1
+                        else: bins_inactive += 1
 
-    def create_library_item(self, list_widget, name, item_type, active):
+        # Actualizar conteos en los labels
+        t = self.texts[self.lang]
+        self.lbl_lib_models.setText(
+            f"{t['lib_models']}    "
+            f"<span style='color:rgba(255,255,255,0.35); font-weight:normal;'>"
+            f"{cars_active} active · {cars_inactive} inactive</span>"
+        )
+        self.lbl_lib_models.setTextFormat(Qt.TextFormat.RichText)
+        self.lbl_lib_bins.setText(
+            f"{t['lib_bins']}    "
+            f"<span style='color:rgba(255,255,255,0.35); font-weight:normal;'>"
+            f"{bins_active} active · {bins_inactive} inactive</span>"
+        )
+        self.lbl_lib_bins.setTextFormat(Qt.TextFormat.RichText)
+
+    def create_library_item(self, list_widget, name, item_type, active, nickname=None):
         item = QListWidgetItem(list_widget)
         widget = QWidget()
         lay = QHBoxLayout(widget)
         lay.setContentsMargins(5, 5, 5, 5)
-
-        color = "#4A90E2" if active else "rgba(255,255,255,0.3)"
-        txt = QLabel(name.upper())
+        a = THEMES[self.theme]["accent"]
+        color = a if active else "rgba(255,255,255,0.3)"
+        nick = (nickname or "").strip()
+        display = f"{name.upper()} ({nick.upper()})" if nick else name.upper()
+        txt = QLabel(display)
         txt.setStyleSheet(f"color: {color}; font-size: 11px; font-weight: 500; border: none; background: transparent;")
 
         btn_toggle = QPushButton("ON" if active else "OFF")
@@ -1021,7 +1570,7 @@ class ModLoaderGUI(QWidget):
                 shutil.move(src, dst)
                 self.load_library_data()
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            self.themed_msg("Error", str(e), "error")
 
     def delete_permanently(self, name, item_type, active):
         reply = QMessageBox.question(
@@ -1038,8 +1587,9 @@ class ModLoaderGUI(QWidget):
                     path = os.path.join(self.addons_path,   "FRONTEND", "MANUFACTURERS", name) if active else os.path.join(self.disabled_path, "BINS", name)
                     if os.path.exists(path): os.remove(path)
                 self.load_library_data()
-            except Exception as e:
-                QMessageBox.critical(self, "Error", str(e))
+            except Exception:
+                ExtractHintDialog(self, self.lang, self.theme).exec()
+            # También mostrar hint si no se detectó contenido válido
 
 
 # ── Entry point ─────────────────────────────────────────────────────────────
@@ -1047,19 +1597,17 @@ if __name__ == "__main__":
     try:
         app = QApplication(sys.argv)
         # Si ya viene el idioma como argumento (relanzado como admin), usarlo directo
-        selected_lang = "EN"
+        selected_lang = "ES"
         for arg in sys.argv[1:]:
             if arg.startswith("--lang="):
                 selected_lang = arg.split("=")[1]
                 break
-        else:
-            # Primera vez — mostrar selección de idioma
-            lang_dialog = LanguageSelectDialog()
-            if not lang_dialog.exec():
-                sys.exit(0)
-            selected_lang = lang_dialog.selected_lang
         gui = ModLoaderGUI(initial_lang=selected_lang)
         gui.show()
         sys.exit(app.exec())
     except Exception as e:
-        ctypes.windll.user32.MessageBoxW(0, f"Error Crítico: {str(e)}", "NFS Garage Crash", 0x10)
+        import traceback
+        log_path = r"C:\Users\jonat\OneDrive\Desktop\crash.log"
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(traceback.format_exc())
+        ctypes.windll.user32.MessageBoxW(0, f"Error Crítico: {str(e)}\n\nLog guardado en: {log_path}", "NFS Garage Crash", 0x10)
